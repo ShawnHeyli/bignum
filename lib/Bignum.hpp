@@ -50,7 +50,12 @@ class Bignum {
 
   friend std::pair<Bignum, Bignum> division(Bignum const &, Bignum const &);
 
+  friend bool compareAbs(Bignum const & x, Bignum const & y);
+  friend Bignum SubtractX_Y(Bignum const & x, Bignum const & y);
+  friend Bignum addSameSign(Bignum const & x, Bignum const & y);
+
   friend Bignum inverseMod(Bignum const &, Bignum const &);
+  friend Bignum fastModularExponentiation(Bignum const &, Bignum const &,Bignum const &);
 };
 
 #endif

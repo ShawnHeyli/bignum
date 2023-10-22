@@ -132,32 +132,79 @@ Bignum operator+(Bignum const &x, Bignum const &y) {
   return resultat;
 }
 
+
+Bignum addSameSign(Bignum const & x, Bignum const & y) {
+  if (y.tab.size() > x.tab.size()) return addSameSign(y,x);
+  Bignum z (0u);
+  z.tab.resize(x.tab.size());
+  uint64_t c = 0;
+  for (unsigned i = 0; i < y.tab.size(); ++i) {
+    uint64_t tmp = x.tab[i] + (y.tab[i] + c);
+    z.tab[i] = tmp;
+    c = tmp >> 32;
+  }
+  for (unsigned i = y.tab.size(); i < x.tab.size(); ++i) {
+    uint64_t tmp = x.tab[i] + c;
+    z.tab[i] = tmp;
+    c = tmp >> 32;
+  }
+  if (c != 0) z.tab.emplace_back(1);
+  return z;
+}
+
+Bignum SubtractX_Y(Bignum const & x, Bignum const & y) {
+  // assume x >= y >= 0
+  Bignum z (0u);
+  z.tab.resize(x.tab.size());
+  uint64_t c = 0;
+  for (unsigned i = 0; i < y.tab.size(); ++i) {
+    uint64_t tmp = x.tab[i] - (y.tab[i] + c);
+    z.tab[i] = tmp;
+    if ((tmp >> 32) != 0) c = 1;
+    else c = 0;
+  }
+  for (unsigned i = y.tab.size(); i < x.tab.size(); ++i) {
+    uint64_t tmp = x.tab[i] - c;
+    z.tab[i] = tmp;
+    if ((tmp >> 32) != 0) c = 1;
+    else c = 0;
+  }
+  return z;
+}
+
+bool compareAbs(Bignum const & x, Bignum const & y) {
+  unsigned nx = x.tab.size();
+  while (nx > 0 && x.tab[nx-1] == 0) --nx;
+  unsigned ny = y.tab.size();
+  while (ny > 0 && y.tab[ny-1] == 0) --ny;
+  if (nx != ny) return nx > ny;
+  while (nx > 0) {
+    --nx;
+    if (x.tab[nx] != y.tab[nx]) return x.tab[nx] > y.tab[nx];
+  }
+  return true;
+}
+
+
 Bignum operator-(Bignum const &x, Bignum const &y) {
-  Bignum resultat = 0;
-  int64_t carry = 0;
-  int64_t n;
-  int64_t tmp = 0;
-
-  if (x >= y)
-    n = x.tab.size();
-  else
-    n = y.tab.size();
-
-  for (int i = 0; i < n; i++) {
-    tmp = carry;
-    if (i < x.tab.size()) tmp += x.tab[i];
-    if (i < y.tab.size()) tmp -= y.tab[i];
-
-    if (tmp < 0) {
-      tmp += pow(2, 32);
-      carry = -1;
-    } else
-      carry = 0;
-
-    resultat.tab.push_back(tmp);
+  if (x.isPositive == y.isPositive) {
+    if (compareAbs(x,y)) {
+      auto z = SubtractX_Y(x,y);
+      z.isPositive = x.isPositive;
+      return z;
+    }
+    else {
+      auto z = SubtractX_Y(y,x);
+      z.isPositive = !x.isPositive;
+      return z;
+    }
+  }
+  else {
+    auto z = addSameSign(x,y);
+    z.isPositive = x.isPositive;
+    return z;
   }
 
-  return resultat;
 }
 
 Bignum operator*(Bignum const &x, Bignum const &y) {
@@ -248,14 +295,9 @@ std::pair<Bignum, Bignum> division(Bignum const &a, Bignum const &b) {
     }
 
     // 3.3 x←x − qi−t−1ybi−t−1.
-    x = x - ((quotient.tab[i - t - 1]) * (y << (32 * (i - t - 1))));
+    x = x - (quotient.tab[i - t - 1]) * (y << (32 * (i - t - 1)));
     x.deleteLeadingZero();
 
-    // 3.4 If x < 0 then set x←x + ybi−t−1 and qi−t−1←qi−t−1 − 1.
-    if (x < 0) {
-      x = x + (y << (32 * (i - t - 1)));
-      quotient.tab[i - t - 1] -= 1;
-    }
   }
   // 4. r←x.
   remainder = x;
@@ -277,16 +319,67 @@ Bignum operator%(Bignum const &x, Bignum const &y) {
   return division(x, y).second;
 }
 
-// Exponentiation rapide modulaire
+Bignum inverseMod(Bignum const &a, Bignum const &b) {
+  Bignum r = a;
+  Bignum r1 = b;
+  Bignum u = 1;
+  Bignum u1 = 0;
+  Bignum v = 0;
+  Bignum v1 = 1;
+  Bignum q;
+  Bignum tmp;
+
+  while (r1 != 0) {
+    q = r / r1;
+    tmp = r1;
+    r1 = r - q * r1;
+    r = tmp;
+
+    tmp = u1;
+    u1 = u - q * u1;
+    u = tmp;
+
+    tmp = v1;
+    v1 = v - q * v1;
+    v = tmp;
+  }
+
+  if (r > 1) {
+    cout << "Error: " << a << " is not invertible modulo " << b << endl;
+    exit(1);
+  }
+
+  if (v < 0) {
+    v = v + b;
+  }
+
+  return v;
+}
+
+Bignum fastModularExponentiation(Bignum const &a, Bignum const &b, Bignum const &n) {
+  Bignum c = 0;
+  Bignum d = 1;
+  Bignum tmp = b;
+  Bignum tmp2 = a;
+
+  while (tmp > 0) {
+    if (tmp % 2 == 1) {
+      c = (c + d) % n;
+    }
+    d = (d * 2) % n;
+    tmp = tmp / 2;
+  }
+
+  return c;
+}
+
 Bignum operator^(Bignum const &e, unsigned m) {
   Bignum resultat = 1;
-  Bignum a = e;
+  Bignum tmp = e;
   while (m > 0) {
-    if (m % 2 == 1) {
-      resultat = resultat * a;
-    }
-    a = a * a;
-    m = m / 2;
+    if (m % 2 == 1) resultat = resultat * tmp;
+    tmp = tmp * tmp;
+    m /= 2;
   }
   return resultat;
 }
@@ -361,7 +454,6 @@ void printHex(ostream &stream, Bignum const &num) {
   for (int i = num.tab.size() - 1; i >= 0; i--) {
     stream << num.tab[i];
   }
-  stream << endl;
 }
 
 void printDec(ostream &stream, Bignum const &num) {
@@ -376,7 +468,7 @@ void printDec(ostream &stream, Bignum const &num) {
     stream << " + " << tmp ;
 
   }
-  stream << ')' << endl;
+  stream << ')';
 }
 
 // Adds a trailing zero when I do + or - not sure why :/
