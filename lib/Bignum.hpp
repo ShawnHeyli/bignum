@@ -2,12 +2,12 @@
 #define BIGNUM_HPP
 
 #include <stdint.h>
+
 #include <string>
 #include <vector>
 
-class Bignum
-{
-public:
+class Bignum {
+ public:
   Bignum(int = 0);
   Bignum(unsigned);
   void deleteLeadingZero();
@@ -25,7 +25,7 @@ public:
   Bignum &operator*=(Bignum const &);
   Bignum &operator/=(Bignum const &);
 
-private:
+ private:
   std::vector<uint32_t> tab;
   bool isPositive;
 
@@ -36,6 +36,8 @@ private:
   friend bool operator==(Bignum const &, Bignum const &);
   friend bool operator!=(Bignum const &, Bignum const &);
 
+  friend void printHex(std::ostream &, Bignum const &);
+  friend void printDec(std::ostream &, Bignum const &);
   friend std::ostream &operator<<(std::ostream &, Bignum const &);
 
   friend Bignum operator+(Bignum const &, Bignum const &);
@@ -43,6 +45,8 @@ private:
   friend Bignum operator*(Bignum const &, Bignum const &);
   friend Bignum operator/(Bignum const &, Bignum const &);
   friend Bignum operator%(Bignum const &, Bignum const &);
+  friend Bignum operator^(Bignum const &, unsigned);
+  friend Bignum operator<<(Bignum const &, unsigned);
 
   friend std::pair<Bignum, Bignum> division(Bignum const &, Bignum const &);
 
