@@ -20,6 +20,9 @@ class Bignum {
   Bignum &operator=(Bignum const &);
   Bignum &operator=(Bignum &&);
 
+  Bignum & operator>>=(unsigned n);
+  Bignum & operator<<=(unsigned n);
+
   Bignum &operator+=(Bignum const &);
   Bignum &operator-=(Bignum const &);
   Bignum &operator*=(Bignum const &);
@@ -39,6 +42,7 @@ class Bignum {
   friend void printHex(std::ostream &, Bignum const &);
   friend void printDec(std::ostream &, Bignum const &);
   friend std::ostream &operator<<(std::ostream &, Bignum const &);
+  
 
   friend Bignum operator+(Bignum const &, Bignum const &);
   friend Bignum operator-(Bignum const &, Bignum const &);
@@ -47,6 +51,8 @@ class Bignum {
   friend Bignum operator%(Bignum const &, Bignum const &);
   friend Bignum operator^(Bignum const &, unsigned);
   friend Bignum operator<<(Bignum const &, unsigned);
+  friend Bignum operator>>(Bignum const &, unsigned);
+  
 
   friend std::pair<Bignum, Bignum> division(Bignum const &, Bignum const &);
 
@@ -55,7 +61,7 @@ class Bignum {
   friend Bignum addSameSign(Bignum const & x, Bignum const & y);
 
   friend Bignum inverseMod(Bignum const &, Bignum const &);
-  friend Bignum fastModularExponentiation(Bignum const &, Bignum const &,Bignum const &);
+  friend Bignum modPow(Bignum const &, Bignum const &,Bignum const &);
 };
 
 #endif

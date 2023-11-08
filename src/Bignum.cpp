@@ -8,6 +8,8 @@
 #include <iostream>
 #include <string>
 
+#include "../lib/Bignum.hpp"
+
 using namespace std;
 
 Bignum::Bignum(int x) {
@@ -132,10 +134,9 @@ Bignum operator+(Bignum const &x, Bignum const &y) {
   return resultat;
 }
 
-
-Bignum addSameSign(Bignum const & x, Bignum const & y) {
-  if (y.tab.size() > x.tab.size()) return addSameSign(y,x);
-  Bignum z (0u);
+Bignum addSameSign(Bignum const &x, Bignum const &y) {
+  if (y.tab.size() > x.tab.size()) return addSameSign(y, x);
+  Bignum z(0u);
   z.tab.resize(x.tab.size());
   uint64_t c = 0;
   for (unsigned i = 0; i < y.tab.size(); ++i) {
@@ -152,31 +153,35 @@ Bignum addSameSign(Bignum const & x, Bignum const & y) {
   return z;
 }
 
-Bignum SubtractX_Y(Bignum const & x, Bignum const & y) {
+Bignum SubtractX_Y(Bignum const &x, Bignum const &y) {
   // assume x >= y >= 0
-  Bignum z (0u);
+  Bignum z(0u);
   z.tab.resize(x.tab.size());
   uint64_t c = 0;
   for (unsigned i = 0; i < y.tab.size(); ++i) {
     uint64_t tmp = x.tab[i] - (y.tab[i] + c);
     z.tab[i] = tmp;
-    if ((tmp >> 32) != 0) c = 1;
-    else c = 0;
+    if ((tmp >> 32) != 0)
+      c = 1;
+    else
+      c = 0;
   }
   for (unsigned i = y.tab.size(); i < x.tab.size(); ++i) {
     uint64_t tmp = x.tab[i] - c;
     z.tab[i] = tmp;
-    if ((tmp >> 32) != 0) c = 1;
-    else c = 0;
+    if ((tmp >> 32) != 0)
+      c = 1;
+    else
+      c = 0;
   }
   return z;
 }
 
-bool compareAbs(Bignum const & x, Bignum const & y) {
+bool compareAbs(Bignum const &x, Bignum const &y) {
   unsigned nx = x.tab.size();
-  while (nx > 0 && x.tab[nx-1] == 0) --nx;
+  while (nx > 0 && x.tab[nx - 1] == 0) --nx;
   unsigned ny = y.tab.size();
-  while (ny > 0 && y.tab[ny-1] == 0) --ny;
+  while (ny > 0 && y.tab[ny - 1] == 0) --ny;
   if (nx != ny) return nx > ny;
   while (nx > 0) {
     --nx;
@@ -185,130 +190,100 @@ bool compareAbs(Bignum const & x, Bignum const & y) {
   return true;
 }
 
-
 Bignum operator-(Bignum const &x, Bignum const &y) {
   if (x.isPositive == y.isPositive) {
-    if (compareAbs(x,y)) {
-      auto z = SubtractX_Y(x,y);
+    if (compareAbs(x, y)) {
+      auto z = SubtractX_Y(x, y);
       z.isPositive = x.isPositive;
       return z;
-    }
-    else {
-      auto z = SubtractX_Y(y,x);
+    } else {
+      auto z = SubtractX_Y(y, x);
       z.isPositive = !x.isPositive;
       return z;
     }
-  }
-  else {
-    auto z = addSameSign(x,y);
+  } else {
+    auto z = addSameSign(x, y);
     z.isPositive = x.isPositive;
     return z;
   }
-
 }
 
 Bignum operator*(Bignum const &x, Bignum const &y) {
-  Bignum resultat;
-  int64_t max = x.tab.size() + y.tab.size();
-  int64_t carry = 0;
-
-  for (int i = 0; i < max; i++) {
-    resultat.tab.push_back(0);
-  }
-
-  for (int i = 0; i < y.tab.size(); i++) {
-    carry = 0;
-    for (int j = 0; j < x.tab.size(); j++) {
-      int64_t tmp = resultat.tab[i + j] + x.tab[i] * y.tab[j] + carry;
-      resultat.tab[i + j] = tmp % int64_t(pow(2.0, 32.0));
-      carry = tmp / pow(2, 32);
+  Bignum w(0);
+  unsigned n = x.tab.size() - 1, t = y.tab.size() - 1;
+  w.tab.resize(n + t + 2);
+  for (unsigned i = 0; i <= t; ++i) {
+    uint64_t c = 0;
+    for (unsigned j = 0; j <= n; ++j) {
+      uint64_t tmp = y.tab[i];
+      tmp *= x.tab[j];
+      tmp += c;
+      tmp += w.tab[i + j];
+      c = tmp >> 32;
+      w.tab[i + j] = tmp;
     }
+    w.tab[i + n + 1] = c;
   }
-  return resultat;
+  w.isPositive = (x.isPositive == y.isPositive);
+  return w;
 }
 
-std::pair<Bignum, Bignum> division(Bignum const &a, Bignum const &b) {
-  Bignum x;
-  Bignum y;
+std::pair<Bignum, Bignum> division(Bignum const &x, Bignum const &y) {
+  if (!compareAbs(x, y)) return make_pair(Bignum(0), x);
+  unsigned t = y.tab.size() - 1;
 
+  while (t >= 0 && y.tab[t] == 0) --t;
 
-  if (b == 0) {
-    cout << "Error: Division by zero\n";
-    exit(1);
+  unsigned n = 0;
+
+  while ((y.tab[t] << n) < (1u << 31)) ++n;
+
+  if (n != 0) {
+    auto p = division(x << n, y << n);
+    p.second = p.second >> n;
+    return p;
   }
+  n = x.tab.size() - 1;
 
-  // to get  n ≥ t ≥ 1
-  // the bigger of the two is stored in x
-  //if (a.tab > b.tab) {
-  //  x = a;
-  //  y = b;
-  //} else {
-  //  x = b;
-  //  y = a;
-  //}
-
-  x=a;
-  y=b;
-
-  Bignum quotient;
-  Bignum remainder;
-
-  int n = x.tab.size() -1;
-  int t = y.tab.size() -1;
-
-  if (n == 0 && t == 0) {
-    quotient.tab[0]     = x.tab[0] / y.tab[0];
-    remainder.tab[0]     = x.tab[0] % y.tab[0];
-    quotient.isPositive = (a.isPositive == b.isPositive);
-    return make_pair(quotient, remainder);
+  while (n >= 0 && x.tab[n] == 0) --n;
+  Bignum q(0);
+  q.tab.resize(n - t + 1);
+  while (x >= (y << 32 * (n - t))) {
+    q.tab[n - t] += 1;
+    x = x - (y << 32 * (n - t));
   }
-
-  // 1. For j from 0 to(n − t) do: q_j ← 0.
-  for (int j = 0; j < (n-t); j++) {
-    quotient.tab.push_back(0);
-  }
-
-  // 2. While(x ≥ y*(b^(n−t))) do the following:
-  // q_(n−t)←q_(n−t) + 1,x←x − yb^(n−t).
-  while (x >= (y << (32 * (n - t)))) {
-    quotient.tab[n - t] += 1;
-    x = x - (y << (32 * (n - t)));
-  }
-
-  // 3. For i from n down to(t + 1) do the following :
-  for (int i = n; i >= (t+1); i--) {
-    // 3.1 If xi = yt then set q_(i−t−1)←b − 1;
-    if (x.tab[i] == y.tab[t]) {
-      quotient.tab[i - t - 1] = 0xFFFFFFFF;
-    } 
-    // otherwise set q_(i−t−1)←(xib+xi−1)/yt).
-    else { 
-      quotient.tab[i - t - 1] = (((uint64_t)(x.tab[i]) << 32) + ((uint64_t)(x.tab[i-1])))/ y.tab[t];
-    }
-
-    // 3.2 While (qi−t−1(ytb + yt−1) > x_i*b^2 + x_(i−1)b + xi−2) do:
-    // qi−t−1←qi−t−1 − 1.
-    Bignum tmp = Bignum(quotient.tab[i - t - 1]) * Bignum((y.tab[t] << 32) + y.tab[t - 1]);
-    Bignum tmp2 = Bignum(x.tab[i] << (64)) + Bignum((x.tab[i-1] << 32) + x.tab[i-2]);
-    while(tmp > tmp2) {
-      quotient.tab[i - t - 1] -= 1;
-    }
-
-    // 3.3 x←x − qi−t−1ybi−t−1.
-    x = x - (quotient.tab[i - t - 1]) * (y << (32 * (i - t - 1)));
-    x.deleteLeadingZero();
-
-  }
-  // 4. r←x.
-  remainder = x;
   
-  quotient.isPositive = (a.isPositive == b.isPositive);
-  remainder.isPositive = a.isPositive;
+  for (unsigned i = n; i >= t + 1; --i) {
+    if (x.tab[i] == y.tab[t])
+      q.tab[i - t - 1] = 0xFFFFFFFF;
+    else {
+      uint64_t tmp = x.tab[i];
+      tmp <<= 32;
+      tmp += x.tab[i - 1];
+      q.tab[i - t - 1] = tmp / y.tab[t];
+    }
 
-  remainder.deleteLeadingZero();
-  quotient.deleteLeadingZero();
+    Bignum a(y.tab[t]);
+    a <<= 32;
+    a += Bignum(y.tab[t - 1]);
 
-  return make_pair(quotient, remainder);
+    Bignum b(x.tab[i]);
+    b <<= 32;
+    b += Bignum(x.tab[i - 1]);
+
+    b <<= 32;
+    b += Bignum(x.tab[i - 2]);
+
+    while (Bignum(q.tab[i - t - 1]) * a > b) {
+      q.tab[i - t - 1] -= 1;
+    }
+    x -= (Bignum(q.tab[i - t - 1]) * y) << (32 * (i - t - 1));
+    if (x < 0) {
+      x += y << (32 * (i - t - 1));
+      q.tab[i - t - 1] -= 1;
+    }
+  }
+  return make_pair(q, x);
 }
 
 Bignum operator/(Bignum const &x, Bignum const &y) {
@@ -319,58 +294,97 @@ Bignum operator%(Bignum const &x, Bignum const &y) {
   return division(x, y).second;
 }
 
-Bignum inverseMod(Bignum const &a, Bignum const &b) {
-  Bignum r = a;
-  Bignum r1 = b;
-  Bignum u = 1;
-  Bignum u1 = 0;
-  Bignum v = 0;
-  Bignum v1 = 1;
-  Bignum q;
-  Bignum tmp;
-
-  while (r1 != 0) {
-    q = r / r1;
-    tmp = r1;
-    r1 = r - q * r1;
-    r = tmp;
-
-    tmp = u1;
-    u1 = u - q * u1;
-    u = tmp;
-
-    tmp = v1;
-    v1 = v - q * v1;
-    v = tmp;
+Bignum &Bignum::operator<<=(unsigned n) {
+  if (n == 0) return *this;
+  unsigned n_bits = n % 32;
+  unsigned n_blocks = n / 32;
+  if (n_bits == 0) {
+    tab.resize(tab.size() + n_blocks);
+    for (unsigned i = tab.size(); i-- != n_blocks;) tab[i] = tab[i - n_blocks];
+  } else {
+    tab.resize(tab.size() + n_blocks + 1);
+    for (unsigned i = tab.size(); i-- != n_blocks + 1;)
+      tab[i] = (tab[i - n_blocks] << n_bits) |
+               (tab[i - (n_blocks + 1)] >> (32 - n_bits));
+    tab[n_blocks] = tab[0] << n_bits;
   }
+  for (unsigned i = 0; i < n_blocks; ++i) tab[i] = 0u;
 
-  if (r > 1) {
-    cout << "Error: " << a << " is not invertible modulo " << b << endl;
-    exit(1);
-  }
+  unsigned ntab = tab.size();
+  while (ntab > 0 && tab[ntab - 1] == 0) --ntab;
+  tab.resize(ntab);
 
-  if (v < 0) {
-    v = v + b;
-  }
-
-  return v;
+  return *this;
 }
 
-Bignum fastModularExponentiation(Bignum const &a, Bignum const &b, Bignum const &n) {
-  Bignum c = 0;
-  Bignum d = 1;
-  Bignum tmp = b;
-  Bignum tmp2 = a;
-
-  while (tmp > 0) {
-    if (tmp % 2 == 1) {
-      c = (c + d) % n;
+Bignum &Bignum::operator>>=(unsigned n) {
+  if (n == 0) return *this;
+  unsigned n_bits = n % 32;
+  unsigned n_blocks = n / 32;
+  if (n_bits == 0) {
+    for (unsigned i = 0; i + n_blocks < tab.size(); ++i)
+      tab[i] = tab[i + n_blocks];
+    if (tab.size() > n_blocks)
+      tab.resize(tab.size() - n_blocks);
+    else {
+      tab.resize(1);
+      tab[0] = 0;
     }
-    d = (d * 2) % n;
-    tmp = tmp / 2;
+  } else {
+    for (unsigned i = 0; i + 1 + n_blocks < tab.size(); ++i)
+      tab[i] = (tab[i + n_blocks] >> n_bits) |
+               (tab[i + (n_blocks + 1)] << (32 - n_bits));
+    tab[tab.size() - n_blocks - 1] = tab[tab.size() - 1] >> n_bits;
   }
 
-  return c;
+  unsigned ntab = tab.size();
+  while (ntab > 0 && tab[ntab - 1] == 0) --ntab;
+  tab.resize(ntab);
+
+  return *this;
+}
+
+Bignum inverseMod(Bignum const &a, Bignum const &b) {
+  Bignum a0(a);
+  Bignum b0(b);
+  Bignum x0(1);
+  Bignum x1(0);
+  Bignum y0(0);
+  Bignum y1(1);
+  Bignum q0(0);
+  Bignum r0(0);
+  Bignum x2(0);
+  Bignum y2(0);
+  Bignum zero(0);
+  while (b0 != zero) {
+    q0 = (a0 / b0);
+    r0 = (a0 % b0);
+    x2 = x0 - (q0 * x1);
+    y2 = y0 - (q0 * y1);
+    a0 = b0;
+    b0 = r0;
+    x0 = x1;
+    y0 = y1;
+    x1 = x2;
+    y1 = y2;
+  }
+  return x0;
+}
+
+Bignum modPow(Bignum const &base, Bignum const &exp, Bignum const &m) {
+  Bignum result(1);
+  Bignum baseNumber = base;
+  Bignum exponent = exp;
+  Bignum tmp;
+  while (exponent > 0) {
+    if ((exponent % 2) == 1) {
+      result = (result * baseNumber) % m;
+    }
+    tmp = (base * base) % m;
+    baseNumber = tmp;
+    exponent = exponent / 2;
+  }
+  return result;
 }
 
 Bignum operator^(Bignum const &e, unsigned m) {
@@ -457,21 +471,19 @@ void printHex(ostream &stream, Bignum const &num) {
 }
 
 void printDec(ostream &stream, Bignum const &num) {
-  if (!num.isPositive){
+  if (!num.isPositive) {
     stream << "-1 * ";
   }
 
   stream << '(' << num.tab[0];
 
-  for (unsigned int i = 1; i < num.tab.size() - 1; i++){
+  for (unsigned int i = 1; i < num.tab.size() - 1; i++) {
     unsigned long tmp = num.tab[i] * pow(i, 32);
-    stream << " + " << tmp ;
-
+    stream << " + " << tmp;
   }
   stream << ')';
 }
 
-// Adds a trailing zero when I do + or - not sure why :/
 ostream &operator<<(ostream &stream, Bignum const &num) {
   printDec(stream, num);
   return stream;
