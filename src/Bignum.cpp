@@ -1,76 +1,35 @@
 #include "../lib/Bignum.hpp"
 
-#include <algorithm>
-#include <bitset>
-#include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <ostream>
 #include <string>
+#include <utility>
 
 #include "../lib/Bignum.hpp"
 
 using namespace std;
 
-Bignum::Bignum(int x)
-{
-  if (x < 0)
-  {
-    this->isPositive = false;
-    this->tab.push_back(x);
-  }
-  else
-  {
-    this->isPositive = true;
-    this->tab.push_back(x);
-  }
-}
+// Donnée sur la branche main
+Bignum::Bignum(int x) : tab(1, x >= 0 ? x : -x), isPositive(x >= 0) {}
 
-Bignum::Bignum(unsigned num)
-{
-  this->isPositive = true;
-  this->tab.push_back(num);
-}
+// Donnée sur la branche main
+Bignum::Bignum(unsigned x) : tab(1, x), isPositive(true) {}
 
-string divise2(string const &s)
+// Donnée sur la branche main
+Bignum::Bignum(string s)
 {
-  string resultat = "";
-  int remainder = 0;
-  for (char c : s)
-  {
-    if (c < '0' || c > '9')
-    {
-      throw runtime_error("invalid input");
-    }
-    remainder = remainder * 10 + int(c - '0');
-    resultat.push_back((remainder / 2) + '0');
-    remainder = remainder % 2;
-  }
-  resultat.append(";" + to_string(remainder));
-  return resultat;
-}
-
-void Bignum::deleteLeadingZero()
-{
-  while (this->tab.size() > 1 && this->tab.back() == 0)
-  {
-    this->tab.pop_back();
-  }
-}
-
-Bignum::Bignum(std::string const &s)
-{
-  string input = s;
-  if (input.size() == 0)
+  if (s.size() == 0)
   {
     tab = vector<uint32_t>(1, 0);
     isPositive = true;
   }
   else
   {
-    if (input.at(0) == '-')
+    if (s.at(0) == '-')
     {
-      input.erase(0, 1);
+      s.erase(0, 1);
       isPositive = false;
     }
     else
@@ -78,24 +37,23 @@ Bignum::Bignum(std::string const &s)
     tab = vector<uint32_t>(1, 0);
     unsigned pos = 0;
     unsigned block = 0;
-    while (input.size() != 0 && input.at(0) == '0')
-      input.erase(0, 1);
-    while (input.size() != 0)
+    while (s.size() != 0 && s.at(0) == '0')
+      s.erase(0, 1);
+    while (s.size() != 0)
     {
       string tmp = "";
       unsigned n = 0;
-      for (auto c : input)
+      for (auto c : s)
       {
         n *= 10;
         n += c - '0';
         tmp += to_string(n / 2);
         n = n % 2;
       }
-      input = move(tmp);
-      while (input.size() != 0 && input.at(0) == '0')
-        input.erase(0, 1);
+      s = std::move(tmp);
+      while (s.size() != 0 && s.at(0) == '0')
+        s.erase(0, 1);
       tab[block] |= n << pos;
-
       if (pos < 31)
         pos += 1;
       else
@@ -108,22 +66,22 @@ Bignum::Bignum(std::string const &s)
   }
 }
 
-Bignum addSameSign(Bignum const &x, Bignum const &y)
+Bignum addSameSign(Bignum const &num, Bignum const &y)
 {
-  if (y.tab.size() > x.tab.size())
-    return addSameSign(y, x);
+  if (y.tab.size() > num.tab.size())
+    return addSameSign(y, num);
   Bignum z(0u);
-  z.tab.resize(x.tab.size());
+  z.tab.resize(num.tab.size());
   uint64_t c = 0;
   for (unsigned i = 0; i < y.tab.size(); ++i)
   {
-    uint64_t tmp = x.tab[i] + (y.tab[i] + c);
+    uint64_t tmp = num.tab[i] + (y.tab[i] + c);
     z.tab[i] = tmp;
     c = tmp >> 32;
   }
-  for (unsigned i = y.tab.size(); i < x.tab.size(); ++i)
+  for (unsigned i = y.tab.size(); i < num.tab.size(); ++i)
   {
-    uint64_t tmp = x.tab[i] + c;
+    uint64_t tmp = num.tab[i] + c;
     z.tab[i] = tmp;
     c = tmp >> 32;
   }
@@ -132,24 +90,24 @@ Bignum addSameSign(Bignum const &x, Bignum const &y)
   return z;
 }
 
-Bignum SubtractX_Y(Bignum const &x, Bignum const &y)
+Bignum SubtractX_Y(Bignum const &num, Bignum const &y)
 {
-  // assume x >= y >= 0
+  // assume num >= y >= 0
   Bignum z(0u);
-  z.tab.resize(x.tab.size());
+  z.tab.resize(num.tab.size());
   uint64_t c = 0;
   for (unsigned i = 0; i < y.tab.size(); ++i)
   {
-    uint64_t tmp = x.tab[i] - (y.tab[i] + c);
+    uint64_t tmp = num.tab[i] - (y.tab[i] + c);
     z.tab[i] = tmp;
     if ((tmp >> 32) != 0)
       c = 1;
     else
       c = 0;
   }
-  for (unsigned i = y.tab.size(); i < x.tab.size(); ++i)
+  for (unsigned i = y.tab.size(); i < num.tab.size(); ++i)
   {
-    uint64_t tmp = x.tab[i] - c;
+    uint64_t tmp = num.tab[i] - c;
     z.tab[i] = tmp;
     if ((tmp >> 32) != 0)
       c = 1;
@@ -159,10 +117,10 @@ Bignum SubtractX_Y(Bignum const &x, Bignum const &y)
   return z;
 }
 
-bool compareAbs(Bignum const &x, Bignum const &y)
+bool compareAbs(Bignum const &num, Bignum const &y)
 {
-  unsigned nx = x.tab.size();
-  while (nx > 0 && x.tab[nx - 1] == 0)
+  unsigned nx = num.tab.size();
+  while (nx > 0 && num.tab[nx - 1] == 0)
     --nx;
   unsigned ny = y.tab.size();
   while (ny > 0 && y.tab[ny - 1] == 0)
@@ -172,70 +130,70 @@ bool compareAbs(Bignum const &x, Bignum const &y)
   while (nx > 0)
   {
     --nx;
-    if (x.tab[nx] != y.tab[nx])
-      return x.tab[nx] > y.tab[nx];
+    if (num.tab[nx] != y.tab[nx])
+      return num.tab[nx] > y.tab[nx];
   }
   return true;
 }
 
-Bignum operator+(Bignum const &x, Bignum const &y)
+Bignum operator+(Bignum const &num, Bignum const &y)
 {
-  if (x.isPositive == y.isPositive)
+  if (num.isPositive == y.isPositive)
   {
-    auto z = addSameSign(x, y);
-    z.isPositive = x.isPositive;
+    auto z = addSameSign(num, y);
+    z.isPositive = num.isPositive;
     return z;
   }
   else
   {
-    if (x.isPositive)
+    if (num.isPositive)
     {
-      if (compareAbs(x, y))
-        return SubtractX_Y(x, y);
-      auto z = SubtractX_Y(y, x);
+      if (compareAbs(num, y))
+        return SubtractX_Y(num, y);
+      auto z = SubtractX_Y(y, num);
       z.isPositive = false;
       return z;
     }
     else
     {
-      if (compareAbs(y, x))
-        return SubtractX_Y(y, x);
-      auto z = SubtractX_Y(x, y);
+      if (compareAbs(y, num))
+        return SubtractX_Y(y, num);
+      auto z = SubtractX_Y(num, y);
       z.isPositive = false;
       return z;
     }
   }
 }
 
-Bignum operator-(Bignum const &x, Bignum const &y)
+Bignum operator-(Bignum const &num, Bignum const &y)
 {
-  if (x.isPositive == y.isPositive)
+  if (num.isPositive == y.isPositive)
   {
-    if (compareAbs(x, y))
+    if (compareAbs(num, y))
     {
-      auto z = SubtractX_Y(x, y);
-      z.isPositive = x.isPositive;
+      auto z = SubtractX_Y(num, y);
+      z.isPositive = num.isPositive;
       return z;
     }
     else
     {
-      auto z = SubtractX_Y(y, x);
-      z.isPositive = !x.isPositive;
+      auto z = SubtractX_Y(y, num);
+      z.isPositive = !num.isPositive;
       return z;
     }
   }
   else
   {
-    auto z = addSameSign(x, y);
-    z.isPositive = x.isPositive;
+    auto z = addSameSign(num, y);
+    z.isPositive = num.isPositive;
     return z;
   }
 }
 
-Bignum operator*(Bignum const &x, Bignum const &y)
+Bignum operator*(Bignum const &num, Bignum const &y)
 {
   Bignum w(0);
-  unsigned n = x.tab.size() - 1, t = y.tab.size() - 1;
+  unsigned n = num.tab.size() - 1, t = y.tab.size() - 1;
   w.tab.resize(n + t + 2);
   for (unsigned i = 0; i <= t; ++i)
   {
@@ -243,7 +201,7 @@ Bignum operator*(Bignum const &x, Bignum const &y)
     for (unsigned j = 0; j <= n; ++j)
     {
       uint64_t tmp = y.tab[i];
-      tmp *= x.tab[j];
+      tmp *= num.tab[j];
       tmp += c;
       tmp += w.tab[i + j];
       c = tmp >> 32;
@@ -251,19 +209,19 @@ Bignum operator*(Bignum const &x, Bignum const &y)
     }
     w.tab[i + n + 1] = c;
   }
-  w.isPositive = (x.isPositive == y.isPositive);
+  w.isPositive = (num.isPositive == y.isPositive);
   return w;
 }
 
 pair<Bignum, Bignum> division(Bignum const &X, Bignum const &Y)
 {
 
-  Bignum x = X;
+  Bignum num = X;
   Bignum y = Y;
 
-  // x et y >= 0
-  if (x < y)
-    return make_pair(Bignum(0), x);
+  // num et y >= 0
+  if (num < y)
+    return make_pair(Bignum(0), num);
   unsigned t = y.tab.size() - 1;
   while (t >= 0 && y.tab[t] == 0)
     --t;
@@ -274,47 +232,47 @@ pair<Bignum, Bignum> division(Bignum const &X, Bignum const &Y)
   {
     if (t == 0)
       n += 32;
-    auto p = division(x << n, y << n);
+    auto p = division(num << n, y << n);
     p.second = p.second >> n;
     return p;
   }
-  n = x.tab.size() - 1;
-  while (n >= 0 && x.tab[n] == 0)
+  n = num.tab.size() - 1;
+  while (n >= 0 && num.tab[n] == 0)
     --n;
   Bignum q(0);
   q.tab.resize(n - t + 1);
-  while (x >= (y << 32 * (n - t)))
+  while (num >= (y << 32 * (n - t)))
   {
     q.tab[n - t] += 1;
-    x = x - (y << 32 * (n - t));
+    num = num - (y << 32 * (n - t));
   }
   for (unsigned i = n; i >= t + 1; --i)
   {
-    if (x.tab[i] == y.tab[t])
+    if (num.tab[i] == y.tab[t])
       q.tab[i - t - 1] = 0xFFFFFFFF;
     else
     {
-      uint64_t tmp = x.tab[i];
+      uint64_t tmp = num.tab[i];
       tmp <<= 32;
-      tmp += x.tab[i - 1];
+      tmp += num.tab[i - 1];
       q.tab[i - t - 1] = tmp / y.tab[t];
     }
     Bignum a(y.tab[t]);
     a <<= 32;
     a += Bignum(y.tab[t - 1]);
-    Bignum b(x.tab[i]);
+    Bignum b(num.tab[i]);
     b <<= 32;
-    b += Bignum(x.tab[i - 1]);
+    b += Bignum(num.tab[i - 1]);
     b <<= 32;
-    b += Bignum(x.tab[i - 2]);
+    b += Bignum(num.tab[i - 2]);
     while (Bignum(q.tab[i - t - 1]) * a > b)
     {
       q.tab[i - t - 1] -= 1;
     }
-    x -= (Bignum(q.tab[i - t - 1]) * y) << (32 * (i - t - 1));
-    if (x < 0)
+    num -= (Bignum(q.tab[i - t - 1]) * y) << (32 * (i - t - 1));
+    if (num < 0)
     {
-      x += y << (32 * (i - t - 1));
+      num += y << (32 * (i - t - 1));
       q.tab[i - t - 1] -= 1;
     }
   }
@@ -323,24 +281,24 @@ pair<Bignum, Bignum> division(Bignum const &X, Bignum const &Y)
     q.tab.pop_back();
   }
 
-  return make_pair(q, x);
+  return make_pair(q, num);
 }
 
-Bignum operator/(Bignum const &x, Bignum const &y)
+Bignum operator/(Bignum const &num, Bignum const &y)
 {
-  auto xx = x; xx.isPositive = true;
+  auto xx = num; xx.isPositive = true;
   auto yy = y; yy.isPositive = true;
-  auto p = division(move(xx),move(yy));
-  if (x.isPositive != y.isPositive) p.first.isPositive = false;
+  auto p = division(std::move(xx),std::move(yy));
+  if (num.isPositive != y.isPositive) p.first.isPositive = false;
   return p.first;
 }
 
-Bignum operator%(Bignum const &x, Bignum const &y)
+Bignum operator%(Bignum const &num, Bignum const &y)
 {
-  auto xx = x; xx.isPositive = true;
+  auto xx = num; xx.isPositive = true;
   auto yy = y; yy.isPositive = true;
-  auto p = division(move(xx),move(yy));
-  if (x.isPositive == y.isPositive && !x.isPositive) p.second.isPositive = false;
+  auto p = division(std::move(xx),std::move(yy));
+  if (num.isPositive == y.isPositive && !num.isPositive) p.second.isPositive = false;
   return p.second;
 }
 
@@ -391,56 +349,55 @@ Bignum & Bignum::operator>>=(unsigned n) {
   return *this;
 }
 
-bool operator<(Bignum const & x, Bignum const & y) {
-    if (x.isPositive != y.isPositive) return y.isPositive;
-    unsigned n = x.tab.size()-1, t = y.tab.size()-1;
-    while (n > 0 && x.tab[n] == 0) --n;
+bool operator<(Bignum const & num, Bignum const & y) {
+    if (num.isPositive != y.isPositive) return y.isPositive;
+    unsigned n = num.tab.size()-1, t = y.tab.size()-1;
+    while (n > 0 && num.tab[n] == 0) --n;
     while (t > 0 && y.tab[t] == 0) --t;
-    if (n != t) return x.isPositive ^ (n > t);
+    if (n != t) return num.isPositive ^ (n > t);
     while (n != 0) {
-      if (x.tab[n] != y.tab[n]) return x.isPositive ^ (x.tab[n] > y.tab[n]);
+      if (num.tab[n] != y.tab[n]) return num.isPositive ^ (num.tab[n] > y.tab[n]);
       --n;
     }
-    if (x.tab[0] == y.tab[0]) return false;
-    return x.isPositive ^ (x.tab[0] > y.tab[0]);
+    if (num.tab[0] == y.tab[0]) return false;
+    return num.isPositive ^ (num.tab[0] > y.tab[0]);
 }
 
-bool operator<=(Bignum const & x, Bignum const & y) {
-    if (x.isPositive != y.isPositive) return y.isPositive;
-    unsigned n = x.tab.size()-1, t = y.tab.size()-1;
-    while (n > 0 && x.tab[n] == 0) --n;
+bool operator<=(Bignum const & num, Bignum const & y) {
+    if (num.isPositive != y.isPositive) return y.isPositive;
+    unsigned n = num.tab.size()-1, t = y.tab.size()-1;
+    while (n > 0 && num.tab[n] == 0) --n;
     while (t > 0 && y.tab[t] == 0) --t;
-    if (n != t) return x.isPositive ^ (n > t);
+    if (n != t) return num.isPositive ^ (n > t);
     while (n != 0) {
-      if (x.tab[n] != y.tab[n]) return x.isPositive ^ (x.tab[n] > y.tab[n]);
+      if (num.tab[n] != y.tab[n]) return num.isPositive ^ (num.tab[n] > y.tab[n]);
       --n;
     }
-    if (x.tab[0] == y.tab[0]) return true;
-    return x.isPositive ^ (x.tab[0] > y.tab[0]);
+    if (num.tab[0] == y.tab[0]) return true;
+    return num.isPositive ^ (num.tab[0] > y.tab[0]);
 }
 
-bool operator==(Bignum const & x, Bignum const & y) {
-    unsigned n = x.tab.size()-1, t = y.tab.size()-1;
-    while (n > 0 && x.tab[n] == 0) --n;
+bool operator==(Bignum const & num, Bignum const & y) {
+    unsigned n = num.tab.size()-1, t = y.tab.size()-1;
+    while (n > 0 && num.tab[n] == 0) --n;
     while (t > 0 && y.tab[t] == 0) --t;
     if (n != t) return false;
-    if (n != 0 && x.isPositive != y.isPositive) return false;
+    if (n != 0 && num.isPositive != y.isPositive) return false;
     while (n != 0) {
-      if (x.tab[n] != y.tab[n]) return false;
+      if (num.tab[n] != y.tab[n]) return false;
       --n;
     }
-    return (x.tab[0] == y.tab[0]) && (x.isPositive == y.isPositive || x.tab[0] == 0);
+    return (num.tab[0] == y.tab[0]) && (num.isPositive == y.isPositive || num.tab[0] == 0);
 }
 
-Bignum modPow(Bignum base, Bignum exp, Bignum m)
+Bignum modPow(Bignum base, Bignum exp, Bignum mod)
 {
-
-  if (base < 0 || exp < 0 || m < 0)
+  if (base < 0 || exp < 0 || mod < 0)
   {
     cerr << "Error modpow, negative value" << endl;
     exit(1);
   }
-  if (m == 1)
+  if (mod == 1)
   {
     return Bignum(0);
   }
@@ -449,18 +406,45 @@ Bignum modPow(Bignum base, Bignum exp, Bignum m)
     return Bignum(1);
   }
   Bignum result(1);
-  base = base % m;
+  base = base % mod;
   while (exp > 0)
   {
     if (exp.tab[0] & 1)
     {
-      result = (result * base) % m;
+      result = (result * base) % mod;
     }
     exp = exp >> 1;
-    base = (base * base) % m;
+    base = (base * base) % mod;
   }
-  result.deleteLeadingZero();
+
   return result;
+}
+
+Bignum invMod(Bignum const &a, Bignum const &b)
+{
+  Bignum u = 1;
+  Bignum u_ = 0;
+  Bignum r = a;
+  Bignum r_ = b;
+
+  while (r_ != 0)
+  {
+    Bignum q = r / r_;
+    Bignum rs = r;
+    Bignum us = u;
+    r = r_;
+    u = u_;
+
+    r_ = rs - (q * r);
+    u_ = us - (q * u);
+  }
+
+  if (u < Bignum(0))
+  {
+    u = u + b;
+  }
+
+  return u;
 }
 
 Bignum operator^(Bignum const &e, unsigned m)
@@ -477,39 +461,18 @@ Bignum operator^(Bignum const &e, unsigned m)
   return resultat;
 }
 
-void printHex(ostream &stream, Bignum const &num)
-{
-  if (!num.isPositive)
-  {
-    stream << "-";
-  }
-  stream << hex << uppercase << "0x" << setfill('0') << setw(8);
-
-  for (int i = num.tab.size() - 1; i >= 0; i--)
-  {
-    stream << num.tab[i];
-  }
-}
-
-void printDec(ostream &stream, Bignum const &num)
-{
-  if (!num.isPositive)
-  {
-    stream << "-1 * ";
-  }
-
-  stream << '(' << num.tab[0];
-
-  for (unsigned int i = 1; i < num.tab.size() - 1; i++)
-  {
-    unsigned long tmp = num.tab[i] * pow(i, 32);
-    stream << " + " << tmp;
-  }
-  stream << ')';
-}
-
 ostream &operator<<(ostream &stream, Bignum const &num)
 {
-  printDec(stream, num);
+  if (!num.isPositive) cout << "-";
+  stream << "0x";
+  bool first = true;
+  for (auto rit = num.tab.rbegin(); rit != num.tab.rend() ; ++rit) {
+    if (first && *rit == 0) continue;
+    stream << hex;
+    if (!first) cout << setfill('0') << setw(8);
+    else first = false;
+    stream << *rit << dec;
+  }
+  if (first) stream << 0;
   return stream;
 }
