@@ -6,8 +6,6 @@
 #include <vector>
 using namespace std;
 
-// Keys
-
 struct PublicKey {
   Bignum e;
   Bignum n;
@@ -18,21 +16,14 @@ struct PrivateKey {
   Bignum n;
 };
 
-bool witness_miller_rabin(Bignum const &, Bignum const &);
-bool primality_miller_rabin(Bignum const &, uint const &k=50);
-bool primality_fermat(Bignum const &, uint const &k=50);
+Bignum random_bignum(const int);
+Bignum prime(const int);
 
-Bignum random_bignum(int const &nbit=1024);
-Bignum random_prime(int const &nbit=1024);
+pair<PublicKey, PrivateKey> keygen(Bignum const &, Bignum const &);
 
-pair<PublicKey, PrivateKey> keygen(Bignum const &p, Bignum const &q);
-
-vector<Bignum> encode(string const &);
-string decode(vector<Bignum> const &);
-
-vector<Bignum> encrypt(string const &, PublicKey);
-string decrypt(vector<Bignum> const &, PrivateKey);
-
-void rsa(int const &key_bitsize, string const &message);
+Bignum encode(string);
+string decode(Bignum);
+vector<Bignum> encode_vector(string, Bignum &, Bignum &);
+string decode_vector(vector<Bignum> , Bignum &, Bignum &);
 
 #endif

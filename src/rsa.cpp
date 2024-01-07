@@ -1,5 +1,5 @@
 #include "../lib/rsa.hpp"
-#include <chrono>
+#include "../lib/Bignum.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <utility>
@@ -7,169 +7,132 @@
 
 using namespace std;
 
-// Doesn't work 
-bool witness_miller_rabin(Bignum const &n, Bignum const &a) {
-  if (n < 3)
-    return false;
-  if (n % 2 == 0)
-    return false;
-  if (a < 1)
-    return false;
-
-  Bignum d = n - 1;
-  Bignum s = 0;
-  while (d % 2 == 0) {
-    d /= 2;
-    s += 1;
-  }
-
-  Bignum x = modPow(a, d, n);
-  if (x == 1 || x == n - 1)
-    return false;
-
-  for (uint i = 0; i < s - 1; i++) {
-    x = (x ^ 2) % n;
-    if (x == 1)
-      return false;
-    if (x == n - 1)
-      return false;
-  }
-
-  return true;
-}
-
-// Doesn't work 
-bool primality_miller_rabin(Bignum const &n, uint const &nb_test) {
-    if (n < 3)
-        return false;
-    if (n % 2 == 0)
-        return false;
-    
-    for (uint i = 0; i < nb_test; i++) {
-        Bignum a = rand() % (n - 2) + 2;
-        if (witness_miller_rabin(n, a)){
-            return false;
-        }
-    }
-    return true;
-}
-
-bool primality_fermat(Bignum const &n, uint const &nb_test) {
-    if (n < 3)
-        return false;
-    if (n % 2 == 0)
-        return false;
-    
-    for (uint i = 0; i < nb_test; i++) {
-        Bignum a = rand() % (n - 2) + 2;
-        if (modPow(a, n - 1, n) != 1)
-            return false;
-    }
-    return true;
-}
-
-Bignum random_bignum(int const &nbit){
+/**
+ * @brief Génère un nombre aléatoire de nbit
+ * @param nbit si nbit < 32 alors nbit = 32 (nbyte = 1)
+ * @return Bignum
+ */
+Bignum random_bignum(int const nbit) {
   int nbyte = nbit / 32;
-  Bignum n = 0;
-  n.isPositive = true;
-  n.tab[0] = rand();
-  if(n.tab[0] % 2 == 0){
-    n.tab[0] = n.tab[0] + 1;
+  if(nbyte < 1) nbyte = 1;
+  Bignum n(0);
+  for (int i = 0; i < nbyte; i++) {
+    n.tab.emplace_back(rand());
   }
-
-  for (int i = 1; i < nbyte; i++ ) {
-      n.tab.push_back(rand());
-  }
-
-  cout << "n = " << n << endl;
+  // Rend le bignum impaire (on évite les nombres pair qui ne sont pas premier)
+  n.tab[0] = n.tab[0] % 2 ? n.tab[0] : n.tab[0] + 1;
   return n;
 }
 
-// incremental search
-// https://crypto.stackexchange.com/questions/1970/how-are-primes-generated-for-rsa
-Bignum random_prime(int const &nbit){
+/**
+  * @brief Génère un nombre premier de nbit
+  * @note 1 / (ln(2^nbit)) = probabilité que le nombre soit premier (ex: 1 / (ln(2^1024)) = (1 / 710))
+  * @return Un bignum fortement probablement premier
+ */
+Bignum prime(const int nbit)
+{
   Bignum n = random_bignum(nbit);
-  while(!primality_fermat(n, 20)){
-    n = n + 2;
-  }
+  while (!primality_fermat(n, 20))
+    n = n + 2; // On passe au nombre impair suivant
   return n;
 }
 
-// Encodes one letter by Bignum for simplicity
-// TODO make it more efficientby cramming 4 letters in one Bignum
-vector<Bignum> encode (string const &input)
-{
-  vector<Bignum> output;
-  for (unsigned long i = 0; i < input.size(); i++)
-  {
-    char c = input[i];
-    Bignum tmp = Bignum(c);
-    output.emplace_back(tmp);
+/**
+ * Génère une paire de clé RSA.
+ * 
+ * @param p Un nombre premier.
+ * @param q Un nombre premier.
+ * @return Une paire de clé RSA.
+ * @throws std::runtime_error si p == q ou si p ou q n'est pas premier.
+ */
+pair<PublicKey, PrivateKey> keygen(Bignum const &p, Bignum const &q) {
+  if (p == q) {
+    cerr << "Erreur --> (keygen) p et q doivent être différent" << endl;
+    exit(EXIT_FAILURE);
   }
-  return output;
+  if (!primality_fermat(p, 20) || !primality_fermat(q, 20)) {
+    cerr << "Erreur --> (keygen) p et q doivent être premier" << endl;
+    exit(EXIT_FAILURE);
+  }
+  Bignum n = p * q;
+  Bignum phi = (p - 1) * (q - 1);
+  Bignum e = 65537;
+  Bignum d = invMod(e, phi);
+  return make_pair(PublicKey{e, n}, PrivateKey{d, n});
 }
 
-string decode(vector<Bignum> const &input)
+/**
+ * @brief Transforme 4 char en un bignum (4 char = 32 bit)
+ * @return Un bignum représentant les 4 char
+ */
+Bignum encode(string input)
 {
-  string output = "";
-  for (unsigned long i = 0; i < input.size(); i++){
-    output += char(input[i].tab[0]);
-  }    
-  return output;
+  Bignum result(0);
+  for (unsigned long i = 0; i < input.length(); i++)
+  {
+    char char_block = input[i];
+    result <<= 8;
+    result += char_block;
+  }
+  return result;
 }
 
-pair<PublicKey, PrivateKey> keygen(Bignum const &p, Bignum const &q){
-    Bignum P = p;
-    Bignum Q = q;
-    if (p == q)
-        throw "p and q must be different";
-    if(!primality_fermat(p) || !primality_fermat(q))
-        throw "p and q must be prime";
-    Bignum n = P * Q;
-    Bignum phi = (P - 1) * (Q - 1);
-    Bignum e = 65537;
-    Bignum d = invMod(e, phi);
-    return make_pair(PublicKey{e, n}, PrivateKey{d, n});
-}
-
-vector<Bignum> encrypt(string const &message, PublicKey pk){
-    vector<Bignum> output = encode(message);
-    for (unsigned long i = 0; i < output.size(); i++)
-    {
-        output[i] = modPow(output[i], pk.e, pk.n);
-    }
-    return output;
-}
-
-string decrypt(vector<Bignum> const &cipher, PrivateKey sk){
-    vector<Bignum> output = cipher;
-    for (unsigned long i = 0; i < output.size(); i++)
-    {
-        output[i] = modPow(output[i], sk.d, sk.n);
-    }
-    return decode(output);
-}
-
-void rsa(int nbit, string message)
+/**
+ * @brief Transforme un bignum en 4 char (32 bit = 4 char)
+ * @return Un string représentant le bignum
+ */
+string decode(Bignum input)
 {
-  auto start = chrono::system_clock::now();
+  string result = "";
+  while (input > 0)
+  {
+    char char_block = input[0] % 256;
+    result.insert(result.begin(), char_block);
+    input >>= 8;
+  }
+  return result;
+}
 
-  Bignum p = random_prime(nbit);
-  Bignum q = random_prime(nbit);
+/**
+ * @brief chiffre un message un vecteur de chiffrement (si la longeur du
+ * message est supperieur a n, on a besoin de plusieur chiffre)
+ *
+ * @param message le message a chiffrer
+ * @param e exposant de chiffrement
+ * @param n module de chiffrememnt
+ * @return vector<Bignum>
+ */
+vector<Bignum> encode_vector(const string message, Bignum &e, Bignum &n)
+{
+  unsigned long block_size = (n.size() * 4) - 1;
+  unsigned long message_length = message.length();
+  vector<Bignum> cypher;
+  for (unsigned long i = 0; i < message_length; i += block_size)
+  {
+    string block = message.substr(i, block_size);
+    Bignum encode_block = encode(block);
+    Bignum encrypted_block = encrypt(encode_block, e, n);
+    cypher.emplace_back(encrypted_block);
+  }
+  return cypher;
+}
 
-  auto end = chrono::system_clock::now();
-  auto elapsed = chrono::duration_cast<chrono::seconds>(end - start);
-  cout << "p & q in: " << elapsed.count() << " seconds" <<'\n';
-
-  pair<PublicKey, PrivateKey> keys = keygen(p, q);
-
-  vector<Bignum> cypher = encrypt(message, keys.first);
-  string plaintext = decrypt(cypher, keys.second);
-
-  cout << "plaintext = " << plaintext << endl;
-  cout << endl;
-
-  end = chrono::system_clock::now();
-  elapsed = chrono::duration_cast<chrono::seconds>(end - start);
-  cout << "RSA in: " << elapsed.count() << " seconds" <<'\n';
+/**
+ * @brief dechiffre une liste de chiffre
+ *
+ * @param cypher la liste de chiffre
+ * @param d l'exposant de dechiffrement
+ * @param n le module de chiffrement
+ * @return string
+ */
+string decode_vector(vector<Bignum> cypher, Bignum &d, Bignum &n)
+{
+  string plaintext = "";
+  for (unsigned long i = 0; i < cypher.size(); i++)
+  {
+    Bignum c(cypher[i]);
+    Bignum decrypted_block = decrypt(c, d, n);
+    plaintext += decode(decrypted_block);
+  }
+  return plaintext;
 }

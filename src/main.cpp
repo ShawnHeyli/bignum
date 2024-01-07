@@ -1,102 +1,132 @@
-#include <cstdlib>
-#include <iostream>
-
 #include "../lib/Bignum.hpp"
 #include "../lib/rsa.hpp"
+#include "../lib/progressbar.hpp"
+#include <chrono>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <utility>
 
 using namespace std;
 
-int main(void) {
+struct RSAResult {
+  string message; /// Message original
+  vector<Bignum> cypher;
+  string plaintext; /// Message déchiffré
+  pair<chrono::duration<double>, chrono::duration<double>>
+      time; /// Temps de génération des clés et de chiffrement/déchiffrement
+};
 
-  srand(time(NULL));
+/**
+ * @brief fonction d'aide pour tester RSA
+ *
+ * @param nbit la taille du nombre en bit
+ * @param message le message a chiffrer
+ * @return RSAResult
+ */
+RSAResult rsa(int nbit, string message) {
+  chrono::time_point<chrono::system_clock> start, end;
+  chrono::duration<double> time_p_q;
+  chrono::duration<double> time_cypher_decypher;
 
-  string message = "Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet.";
+  start = chrono::system_clock::now();
+  Bignum p = prime(nbit);
+  Bignum q = prime(nbit);
+  end = chrono::system_clock::now();
+  time_p_q = end - start;
 
-  int nbit = 256;
-  auto p = random_prime(nbit);
-  auto q = random_prime(nbit);
-  cout << "p = " << p << endl;
-  cout << "q = " << q << endl;
-  Bignum n = p * q;
-  Bignum phi = (p - 1) * (q - 1);
-  Bignum e = 65537;
-  Bignum d = invMod(e, phi);
+  auto keys = keygen(p, q);
 
-  auto cypher = encrypt(message, PublicKey{e, n});
-  auto plaintext = decrypt(cypher, PrivateKey{d, n});
-  
-  cout << "Encrypted message: " << plaintext << endl;
+  start = chrono::system_clock::now();
+  vector<Bignum> cypher = encode_vector(message, keys.first.e, keys.first.n);
+  string plain_decrypted = decode_vector(cypher, keys.second.d, keys.second.n);
+  end = chrono::system_clock::now();
+  time_cypher_decypher = end - start;
 
-  //rsa(512, "Hi mom!");
-  
-  exit(0);
+  return RSAResult{message, cypher, plain_decrypted,
+                   make_pair(time_p_q, time_cypher_decypher)};
+}
 
-  cout << "TEST ADDITION" << endl;
-  cout << "3 + 2 (expected: 5) = " << Bignum(3) + Bignum(2) << endl;
-  cout << "73418 + 267 (expected: 73685) = " << Bignum(73418) + Bignum(267) << endl;
-  cout << "4294967297 + 2 (expected: 4294967299) = " << Bignum("4294967297") + Bignum(2) << endl;
+int main() {
+  srand((unsigned)time(NULL));
+  int choice = 0;
+  while (choice != 3) {
+    cout << "1. Chiffrement RSA" << endl;
+    cout << "2. Benchmark" << endl;
+    cout << "3. Quitter" << endl;
+    cout << "Choix: ";
+    cin >> choice;
+    cout << endl;
 
-  cout << endl << "TEST SOUSTRACTION" << endl;
-  cout << "3-2 (expected: 1) = " << Bignum(3) - Bignum(2) << endl;
-  cout << "73418-267 (expected: 73151) = " << Bignum(73418) - Bignum(267) << endl;
-  cout << "4294967297 - 2 (expected: 4294967295) = " << Bignum("4294967297") - Bignum(2) << endl;
+    chrono::time_point<chrono::system_clock> start, end;
+    chrono::duration<double> average_p_q = chrono::duration<double>::zero();
+    chrono::duration<double> average_cypher_decypher = chrono::duration<double>::zero();
+    int nb_test = 100;
+    progressbar bar(nb_test);
 
-  cout << endl << "TEST MULTIPLICATION" << endl;
-  cout << "3*2 (expected: 6) = " << Bignum(3) * Bignum(2) << endl;
-  cout << "73418*267 (expected: 19602606) = " << Bignum(73418) * Bignum(267) << endl;
-  cout << "4294967297 * 2 (expected: 8589934594) = " << Bignum("4294967297") * Bignum(2) << endl;
+    int nbit;
+    
+    RSAResult rsa_result;
+    string message =
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras nec "
+        "dolor at erat pharetra egestas ac a nisi. Vestibulum vestibulum felis "
+        "tellus, in malesuada orci vulputate sed. Vestibulum rutrum sagittis "
+        "elit eu placerat. Pellentesque gravida dui non mollis imperdiet. "
+        "Vestibulum magna neque, laoreet vitae placerat in, rutrum sit amet "
+        "enim. Praesent convallis egestas neque in eleifend. Donec et felis "
+        "mi. Duis rutrum lorem at est suscipit vestibulum. Nulla facilisi. ";
 
-  cout << endl << "TEST DIVISION" << endl;
-  cout << "3/2 (expected: 1) = " << Bignum(3) / Bignum(2) << endl;
-  cout << "73418/267 (expected: 274) = " << Bignum(73418) / Bignum(267) << endl;
-  cout << "4294967297 / 2 (expected: 2147483648) = " << Bignum("4294967297") / Bignum(2) << endl;
+    switch (choice) {
+    case 1:
+      cout << "nbit (ex: 256,512,1024): ";
+      cin >> nbit;
+      cout << endl;
+      rsa_result = rsa(nbit, "Hi mom!");
+      cout << "Message: " << rsa_result.message << endl;
+      cout << "Cypher: ";
+      for (auto c : rsa_result.cypher) {
+        cout << c << " ";
+      }
+      cout << endl;
+      cout << "Plaintext: " << rsa_result.plaintext << endl;
+      cout << "Temps de génération des clés: " << rsa_result.time.first.count()
+           << "s" << endl;
+      cout << "Temps de chiffrement/déchiffrement: "
+           << rsa_result.time.second.count() << "s" << endl;
+      cout << endl;
+      break;
 
-  cout << endl <<  "TEST MODULO" << endl;
-  cout << "3%2 (expected: 1) = " << Bignum(3) % Bignum(2) << endl;
-  cout << "73418/267 (expected: 260) = " << Bignum(73418) % Bignum(267) << endl;
-  cout << "4294967297 % 2000000 (expected: 967297) = " << Bignum("4294967297") % Bignum("2000000") << endl;
+    case 2:
+      cout << "nbit (ex: 256,512,1024): ";
+      cin >> nbit;
+      cout << endl;
 
-  cout << endl << "TEST INVERSE MODULAIRE" << endl;
-  cout << "invMod(123, 4567) (expected: 854) = " << invMod(Bignum(123), Bignum(4567)) << endl;
-  cout << "invMod(93617137, 37932134) (expected: 36007025) = " << invMod(Bignum("93617137"), Bignum("37932134")) << endl;
+      
+      start = chrono::system_clock::now();
+      for (int i = 0; i < nb_test; i++) {
+        rsa_result = rsa(nbit, message);
+        bar.update();
 
-  cout << endl << "TEST EXPONENTIATION MODULAIRE" << endl;
-  cout << "expMod(3, 2, 5) (expected: 4) = " << modPow(Bignum(3), Bignum(2), Bignum(5)) << endl;
-  cout << "expMod(3, 3, 5) (expected: 2) = " << modPow(Bignum(3), Bignum(3), Bignum(5)) << endl;
-  cout << "expMod(170141183460469231731687303715884105727, 25, 12) (expected: 7) = " << modPow(Bignum("170141183460469231731687303715884105727"), Bignum(25), Bignum(12)) << endl;
-  cout << "expMod(170141183460469231731687303715884105727, 170141183460469231731687303715884105727, 325) (expected: 153) = " << modPow(Bignum("170141183460469231731687303715884105727"), Bignum("170141183460469231731687303715884105727"), Bignum("325")) << endl;
-  
-  cout << endl << "TEST PRIMALITY MILLER RABIN" << endl;
-  cout << "miller_rabin_test(561) (expected: false) = " << primality_miller_rabin(Bignum("561")) << endl;
-  cout << "miller_rabin_test(1373653) (expected: false) = " << primality_miller_rabin(Bignum("1373653")) << endl;
-  cout << "miller_rabin_test(67280421310721) (expected: true) = " << primality_miller_rabin(Bignum("67280421310721")) << endl;
-  cout << "miller_rabin_test(1635795965187779) (expected: true) = " << primality_miller_rabin(Bignum("1635795965187779")) << endl;
-  cout << "miller_rabin_test(16357937173713) (expected: false) = " << primality_miller_rabin(Bignum("16357937173713")) << endl;
-  
-  cout << endl << "TEST PRIMALITY FERMAT" << endl;
-  cout << "primality_fermat(561) (expected: false) = " << primality_fermat(Bignum("561")) << endl;
-  cout << "primality_fermat(1373653) (expected: false) = " << primality_fermat(Bignum("1373653")) << endl;
-  cout << "primality_fermat(67280421310721) (expected: true) = " << primality_fermat(Bignum("67280421310721")) << endl;
-  cout << "primality_fermat(1635795965187779) (expected: true) = " << primality_fermat(Bignum("1635795965187779")) << endl;
-  cout << "primality_fermat(16357937173713) (expected: false) = " << primality_fermat(Bignum("16357937173713")) << endl;
+        average_p_q += rsa_result.time.first;
+        average_cypher_decypher += rsa_result.time.second;
+      }
+      end = chrono::system_clock::now();
+      cout << endl;
+      cout << "Temps moyen de génération des clés: "
+           << average_p_q.count() / nb_test << "s" << endl;
+      cout << "Temps moyen de chiffrement/déchiffrement: "
+            << average_cypher_decypher.count() / nb_test << "s" << endl;
+      break;
 
-  cout << endl << "TEST RANDOM BIGNUM" << endl;
-  cout << "random_bignum(32 bits) = " << random_bignum(1) << endl;
-  cout << "random_bignum(64 bits) = " << random_bignum(2) << endl;
-  cout << "random_bignum(128 bits) = " << random_bignum(4) << endl;
-  cout << "random_bignum(256 bits) = " << random_bignum(8) << endl;
-  cout << "random_bignum(512 bits) = " << random_bignum(16) << endl;
-  cout << "random_bignum(1024 bits) = " << random_bignum(32) << endl;
+    case 3:
+      exit(EXIT_SUCCESS);
+      break;
 
-  cout << endl << "RANDOM PRIME" << endl;
-  cout << "random_prime(4 bits) = " << random_prime(1) << endl;
+    default:
+      cerr << "Choix invalide" << endl;
+      break;
+    }
+  }
 
-  cout << endl << "KEYGEN RSA" << endl;
-  pair<PublicKey, PrivateKey> keys = keygen(Bignum("67280421310721"), Bignum("1635795965187779"));
-  cout << "e = " << keys.first.e << endl;
-  cout << "n = " << keys.first.n << endl;
-  cout << "d = " << keys.second.d << endl;
-  cout << "n = " << keys.second.n << endl;
-
-  return 0;
+  return EXIT_SUCCESS;
 }
